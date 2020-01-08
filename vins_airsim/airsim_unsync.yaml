@@ -3,13 +3,13 @@
 #common parameters
 #support: 1 imu 1 cam; 1 imu 2 cam: 2 cam; 
 imu: 1         
-num_of_cam: 2  
+num_of_cam: 2
 
 imu_topic: "/airsim_node/Drone_1/imu/imu_1"
 # imu_topic: "/dji_sdk_1/dji_sdk/imu"
 image0_topic: "/airsim_node/Drone_1/leftcamera_1/Scene"
 image1_topic: "/airsim_node/Drone_1/rightcamera_1/Scene"
-output_path: "/root/"
+output_path: "/home/xuhao/output/"
 
 cam0_calib: "left.yaml"
 cam1_calib: "right.yaml"
@@ -53,7 +53,7 @@ max_cnt: 120            # max feature number in feature tracking
 min_dist: 30            # min distance between two features 
 freq: 10                # frequence (Hz) of publish tracking result. At least 10Hz for good estimation. If set 0, the frequence will be same as raw image 
 F_threshold: 1.0        # ransac threshold (pixel)
-show_track: 0           # publish tracking image as topic
+show_track: 1           # publish tracking image as topic
 flow_back: 1            # perform forward and backward optical flow to improve feature tracking accuracy
 
 #optimization parameters
@@ -78,7 +78,7 @@ pose_graph_save_path: "/home/dji/output/pose_graph/" # save and load path
 save_image: 0                   # save image in pose graph for visualization prupose; you can close this function by setting 0 
 
 #rectify
-body_T_cam0: !!opencv-matrix
+cam0_rectify: !!opencv-matrix
   rows: 4
   cols: 4
   dt: d
@@ -87,7 +87,7 @@ body_T_cam0: !!opencv-matrix
         0, -1, 0, 0.1, 
         0., 0., 0., 1 ]
 
-body_T_cam1: !!opencv-matrix
+cam1_rectify: !!opencv-matrix
   rows: 4
   cols: 4
   dt: d

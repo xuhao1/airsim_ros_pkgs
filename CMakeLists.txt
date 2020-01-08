@@ -2,19 +2,19 @@ cmake_minimum_required(VERSION 3.10.0)
 project(airsim_ros_pkgs)
 
 # set this to path to AirSim root folder if you want your catkin workspace in a custom directory
-set(AIRSIM_ROOT /home/xuhao/swarm_sim/AirSim/)
+set(AIRSIM_ROOT /home/xuhao/source/airsim/)
 
 add_subdirectory("${AIRSIM_ROOT}/cmake/rpclib_wrapper" rpclib_wrapper)
 add_subdirectory("${AIRSIM_ROOT}/cmake/AirLib" AirLib)
 add_subdirectory("${AIRSIM_ROOT}/cmake/MavLinkCom" MavLinkCom)
 
-set(CMAKE_CXX_STANDARD 11) 
+set(CMAKE_CXX_STANDARD 11)
 set(RPC_LIB_INCLUDES " ${AIRSIM_ROOT}/external/rpclib/rpclib-2.2.1/include")
 set(RPC_LIB rpc) # name of .a file with lib prefix
 message(STATUS "found RPC_LIB_INCLUDES=${RPC_LIB_INCLUDES}")
 
 # todo eigen3 in AirLib already
-# find_package(Eigen3 REQUIRED) 
+# find_package(Eigen3 REQUIRED)
 find_package(Boost REQUIRED)
 SET("OpenCV_DIR"  "/usr/local/share/OpenCV/")
 find_package(OpenCV REQUIRED)
@@ -64,7 +64,7 @@ generate_messages(
 catkin_package(
   INCLUDE_DIRS include
   # LIBRARIES airsim_ros
-  CATKIN_DEPENDS message_runtime roscpp std_msgs # nodelet 
+  CATKIN_DEPENDS message_runtime roscpp std_msgs # nodelet
 )
 
 include_directories(
@@ -102,7 +102,7 @@ install(TARGETS
     DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-install(TARGETS 
+install(TARGETS
     #list of shared libraries
     airsim_ros
     pd_position_controller_simple
@@ -110,7 +110,7 @@ install(TARGETS
     LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 )
 
-install(FILES 
+install(FILES
   #list of necessary files (xml...)
   README.md
   # settings.json

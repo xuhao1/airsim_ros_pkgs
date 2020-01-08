@@ -97,7 +97,7 @@ void AirsimROSWrapper::initialize_ros()
     create_ros_pubs_from_settings_json();
     ROS_INFO("Drone control %fms", update_airsim_control_every_n_sec*1000);
     // airsim_control_update_timer_ = nh_private_.createTimer(ros::Duration(update_airsim_control_every_n_sec), &AirsimROSWrapper::drone_state_timer_cb, this);
-    airsim_imu_update_timer_ = nh_private_.createTimer(ros::Duration(0.005), &AirsimROSWrapper::drone_imu_timer_cb, this);
+    airsim_imu_update_timer_ = nh_private_.createTimer(ros::Duration(0.00333), &AirsimROSWrapper::drone_imu_timer_cb, this);
 }
 
 // XmlRpc::XmlRpcValue can't be const in this case
@@ -677,9 +677,9 @@ sensor_msgs::Imu AirsimROSWrapper::get_imu_msg_from_airsim(const msr::airlib::Im
     imu_msg.orientation.w = imu_data.orientation.w();
 
     // todo radians per second
-    imu_msg.angular_velocity.x = math_common::deg2rad(imu_data.angular_velocity.x());
-    imu_msg.angular_velocity.y = -math_common::deg2rad(imu_data.angular_velocity.y());
-    imu_msg.angular_velocity.z = -math_common::deg2rad(imu_data.angular_velocity.z());
+    imu_msg.angular_velocity.x = (imu_data.angular_velocity.x());
+    imu_msg.angular_velocity.y = -(imu_data.angular_velocity.y());
+    imu_msg.angular_velocity.z = -(imu_data.angular_velocity.z());
 
     // meters/s2^m 
     imu_msg.linear_acceleration.x = -imu_data.linear_acceleration.x();
