@@ -96,7 +96,7 @@ void AirsimROSWrapper::initialize_ros()
 
     create_ros_pubs_from_settings_json();
     ROS_INFO("Drone control %fms", update_airsim_control_every_n_sec*1000);
-    airsim_control_update_timer_ = nh_private_.createTimer(ros::Duration(update_airsim_control_every_n_sec), &AirsimROSWrapper::drone_state_timer_cb, this);
+    // airsim_control_update_timer_ = nh_private_.createTimer(ros::Duration(update_airsim_control_every_n_sec), &AirsimROSWrapper::drone_state_timer_cb, this);
     airsim_imu_update_timer_ = nh_private_.createTimer(ros::Duration(0.005), &AirsimROSWrapper::drone_imu_timer_cb, this);
 }
 
@@ -657,8 +657,18 @@ sensor_msgs::PointCloud2 AirsimROSWrapper::get_lidar_msg_from_airsim(const msr::
 }
 
 // todo covariances
-sensor_msgs::Imu AirsimROSWrapper::get_imu_msg_from_airsim(const msr::airlib::ImuBase::Output& imu_data) const
+ros::Time AirsimROSWrapper::make_ts(uint64_t unreal_ts) {
+    if (first_imu_unreal_ts < 0) {
+        first_imu_unreal_ts = unreal_ts;
+        first_imu_ros_ts = ros::Time::now();
+    }
+
+    return  first_imu_ros_ts + ros::Duration( (unreal_ts- first_imu_unreal_ts)/1e9);
+}
+sensor_msgs::Imu AirsimROSWrapper::get_imu_msg_from_airsim(const msr::airlib::ImuBase::Output& imu_data)
 {
+
+    
     sensor_msgs::Imu imu_msg;
     // imu_msg.header.frame_id = "/airsim/odom_local_ned";// todo multiple drones
     imu_msg.orientation.x = imu_data.orientation.x();
@@ -679,7 +689,7 @@ sensor_msgs::Imu AirsimROSWrapper::get_imu_msg_from_airsim(const msr::airlib::Im
     // imu_msg.orientation_covariance = ;
     // imu_msg.angular_velocity_covariance = ;
     // imu_msg.linear_acceleration_covariance = ;
-
+    imu_msg.header.stamp = make_ts(imu_data.time_stamp);
     return imu_msg;
 }
 
@@ -746,7 +756,6 @@ void AirsimROSWrapper::drone_imu_timer_cb(const ros::TimerEvent& event)
                 // lck.unlock();
                 sensor_msgs::Imu imu_msg = get_imu_msg_from_airsim(imu_data);
                 imu_msg.header.frame_id = vehicle_imu_pair.first;
-                imu_msg.header.stamp = ros::Time::now();
                 imu_pub_vec_[ctr].publish(imu_msg);
                 ctr++;
             } 
@@ -974,7 +983,8 @@ void AirsimROSWrapper::append_static_camera_tf(const std::string& vehicle_name, 
 void AirsimROSWrapper::img_response_timer_cb(const ros::TimerEvent& event)
 {    
     auto start = high_resolution_clock::now();
-
+    
+    
     try
     {
         std::vector<ImageRequest> img_reqs;
@@ -984,7 +994,7 @@ void AirsimROSWrapper::img_response_timer_cb(const ros::TimerEvent& event)
             // std::unique_lock<std::recursive_mutex> lck(drone_control_mutex_);
             const std::vector<ImageResponse>& img_response = airsim_client_images_.simGetImages(airsim_img_request_vehicle_name_pair.first, airsim_img_request_vehicle_name_pair.second);
             // lck.unlock();
-            ROS_INFO("Grab image cost %fms Length %d name %s", DT_MS(start), img_response.size(), airsim_img_request_vehicle_name_pair.second.c_str());
+            ROS_INFO("Grab image cost %fms Length %ld name %s", DT_MS(start), img_response.size(), airsim_img_request_vehicle_name_pair.second.c_str());
 
             if (img_response.size() == airsim_img_request_vehicle_name_pair.first.size()) 
             {
@@ -1056,12 +1066,12 @@ cv::Mat AirsimROSWrapper::manual_decode_depth(const ImageResponse& img_response)
 
 sensor_msgs::ImagePtr AirsimROSWrapper::get_img_msg_from_response(const ImageResponse& img_response,
                                                                 const ros::Time curr_ros_time, 
-                                                                const std::string frame_id) const
+                                                                const std::string frame_id)
 {
     sensor_msgs::ImagePtr img_msg_ptr = boost::make_shared<sensor_msgs::Image>();
     img_msg_ptr->data = img_response.image_data_uint8;
     img_msg_ptr->step = img_response.width * 3; // AirSim gives RGBA images on linux;
-    img_msg_ptr->header.stamp = curr_ros_time;
+    img_msg_ptr->header.stamp = make_ts(img_response.time_stamp);
     img_msg_ptr->header.frame_id = frame_id;
     img_msg_ptr->height = img_response.height;
     img_msg_ptr->width = img_response.width;
@@ -1074,7 +1084,7 @@ sensor_msgs::ImagePtr AirsimROSWrapper::get_img_msg_from_response(const ImageRes
 
 sensor_msgs::ImagePtr AirsimROSWrapper::get_depth_img_msg_from_response(const ImageResponse& img_response,
                                                                         const ros::Time curr_ros_time,
-                                                                        const std::string frame_id) const
+                                                                        const std::string frame_id)
 {
     // todo using img_response.image_data_float direclty as done get_img_msg_from_response() throws an error, 
     // hence the dependency on opencv and cv_bridge. however, this is an extremely fast op, so no big deal.
