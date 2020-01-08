@@ -1,0 +1,57 @@
+{
+  "ClockSpeed": 1,
+  "SeeDocsAt": "https://github.com/Microsoft/AirSim/blob/master/docs/settings.md",
+  "SettingsVersion": 1.2,
+  "SimMode": "Multirotor",
+  "ViewMode": "SpringArmChase",
+  "Vehicles": {
+    "Drone_1": {
+      "VehicleType": "SimpleFlight",
+      "Sensors": {
+        "imu_1": {
+          "SensorType": 2,
+          "Enabled": true
+        }
+      },
+      "AllowAPIAlways": false,
+      "Cameras": {
+        "leftcamera_1": {
+          "CaptureSettings": [
+            {
+              "ImageType": 0,
+              "Width": 640,
+              "Height": 480,
+              "FOV_Degrees": 90,
+              "TargetGamma": 1.5
+            }
+          ],
+          "X": 0.35, "Y": -0.05, "Z": -0.1,
+          "Pitch": 0, "Roll": 0, "Yaw": 0
+        },
+        "rightcamera_1": {
+          "CaptureSettings": [
+            {
+              "ImageType": 0,
+              "Width": 640,
+              "Height": 480,
+              "FOV_Degrees": 90,
+              "TargetGamma": 1.5
+            }
+          ],
+          "X": 0.35, "Y": 0.05, "Z": -0.1,
+          "Pitch": 0, "Roll": 0, "Yaw": 0
+        }
+      },
+      "X": 0, "Y": 0, "Z": 0,
+      "Pitch": 0, "Roll": 0, "Yaw": 0
+    }
+  },  
+  "SubWindows": [
+    {"WindowID": 1, "ImageType": 0, "CameraName": "leftcamera_1", "Visible": false},
+    {"WindowID": 2, "ImageType": 0, "CameraName": "rightcamera_1", "Visible": false}
+  ],
+  "CameraDirector": {
+    "FollowDistance": -0.5,
+    "X":-0.5, "Y":0, "Z": -0.5
+  }
+}

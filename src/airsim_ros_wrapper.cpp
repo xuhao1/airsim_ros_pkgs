@@ -662,9 +662,10 @@ ros::Time AirsimROSWrapper::make_ts(uint64_t unreal_ts) {
         first_imu_unreal_ts = unreal_ts;
         first_imu_ros_ts = ros::Time::now();
     }
-
     return  first_imu_ros_ts + ros::Duration( (unreal_ts- first_imu_unreal_ts)/1e9);
 }
+
+
 sensor_msgs::Imu AirsimROSWrapper::get_imu_msg_from_airsim(const msr::airlib::ImuBase::Output& imu_data)
 {
 
