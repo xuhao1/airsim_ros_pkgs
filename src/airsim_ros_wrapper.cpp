@@ -87,18 +87,22 @@ void AirsimROSWrapper::initialize_ros()
 
     // ros params
     double update_airsim_control_every_n_sec;
+    double imu_n_sec;
     nh_private_.getParam("is_vulkan", is_vulkan_);
     nh_private_.getParam("update_airsim_control_every_n_sec", update_airsim_control_every_n_sec);
-    vel_cmd_duration_ = 0.05; // todo rosparam
+    nh_private_.getParam("update_imu_n_sec", imu_n_sec);
+    vel_cmd_duration_ = 0.02; // todo rosparam
     // todo enforce dynamics constraints in this node as well?
     // nh_.getParam("max_vert_vel_", max_vert_vel_);
     // nh_.getParam("max_horz_vel", max_horz_vel_)
 
     create_ros_pubs_from_settings_json();
     ROS_INFO("Drone control %fms", update_airsim_control_every_n_sec*1000);
-    // airsim_control_update_timer_ = nh_private_.createTimer(ros::Duration(update_airsim_control_every_n_sec), &AirsimROSWrapper::drone_state_timer_cb, this);
-    airsim_imu_update_timer_ = nh_private_.createTimer(ros::Duration(0.00333), &AirsimROSWrapper::drone_imu_timer_cb, this);
+    airsim_control_update_timer_ = nh_private_.createTimer(ros::Duration(update_airsim_control_every_n_sec), &AirsimROSWrapper::drone_state_timer_cb, this);
+    airsim_imu_update_timer_ = nh_private_.createTimer(ros::Duration(imu_n_sec), &AirsimROSWrapper::drone_imu_timer_cb, this);
 }
+
+
 
 // XmlRpc::XmlRpcValue can't be const in this case
 void AirsimROSWrapper::create_ros_pubs_from_settings_json()
@@ -141,6 +145,7 @@ void AirsimROSWrapper::create_ros_pubs_from_settings_json()
         multirotor_ros.vehicle_name = curr_vehicle_name;
         multirotor_ros.odom_local_ned_pub = nh_private_.advertise<nav_msgs::Odometry>(curr_vehicle_name + "/odom_local_ned", 10);
         multirotor_ros.global_gps_pub = nh_private_.advertise<sensor_msgs::NavSatFix>(curr_vehicle_name + "/global_gps", 10);
+        multirotor_ros.attitude_pub = nh_private_.advertise<geometry_msgs::QuaternionStamped>(curr_vehicle_name + "/attitude", 10);
 
         // bind to a single callback. todo optimal subs queue length
         // bind multiple topics to a single callback, but keep track of which vehicle name it was by passing curr_vehicle_name as the 2nd argument 
@@ -149,11 +154,15 @@ void AirsimROSWrapper::create_ros_pubs_from_settings_json()
         multirotor_ros.vel_cmd_world_frame_sub = nh_private_.subscribe<airsim_ros_pkgs::VelCmd>(curr_vehicle_name + "/vel_cmd_world_frame", 1, 
             boost::bind(&AirsimROSWrapper::vel_cmd_world_frame_cb, this, _1, multirotor_ros.vehicle_name));
 
+        multirotor_ros.control_sub = nh_private_.subscribe<sensor_msgs::Joy>(curr_vehicle_name + "/flight_control", 1,
+            boost::bind(&AirsimROSWrapper::control_cmd_sub, this, _1, multirotor_ros.vehicle_name) );
+
         multirotor_ros.takeoff_srvr = nh_private_.advertiseService<airsim_ros_pkgs::Takeoff::Request, airsim_ros_pkgs::Takeoff::Response>(curr_vehicle_name + "/takeoff", 
             boost::bind(&AirsimROSWrapper::takeoff_srv_cb, this, _1, _2, multirotor_ros.vehicle_name) );
         multirotor_ros.land_srvr = nh_private_.advertiseService<airsim_ros_pkgs::Land::Request, airsim_ros_pkgs::Land::Response>(curr_vehicle_name + "/land", 
             boost::bind(&AirsimROSWrapper::land_srv_cb, this, _1, _2, multirotor_ros.vehicle_name) );
         // multirotor_ros.reset_srvr = nh_private_.advertiseService(curr_vehicle_name + "/reset",&AirsimROSWrapper::reset_srv_cb, this);
+        
 
         multirotor_ros_vec_.push_back(multirotor_ros);
         idx++;
@@ -263,8 +272,6 @@ void AirsimROSWrapper::create_ros_pubs_from_settings_json()
     {
         takeoff_all_srvr_ = nh_private_.advertiseService("all_robots/takeoff", &AirsimROSWrapper::takeoff_all_srv_cb, this);
         land_all_srvr_ = nh_private_.advertiseService("all_robots/land", &AirsimROSWrapper::land_all_srv_cb, this);
-
-        // gimbal_angle_quat_cmd_sub_ = nh_.subscribe("gimbal_angle_quat_cmd", 50, &AirsimROSWrapper::gimbal_angle_quat_cmd_cb, this);
 
         vel_cmd_all_body_frame_sub_ = nh_private_.subscribe("all_robots/vel_cmd_body_frame", 1, &AirsimROSWrapper::vel_cmd_all_body_frame_cb, this);
         vel_cmd_all_world_frame_sub_ = nh_private_.subscribe("all_robots/vel_cmd_world_frame", 1, &AirsimROSWrapper::vel_cmd_all_world_frame_cb, this);
@@ -448,6 +455,18 @@ void AirsimROSWrapper::vel_cmd_body_frame_cb(const airsim_ros_pkgs::VelCmd::Cons
     multirotor_ros_vec_[vehicle_idx].has_vel_cmd = true;
 }
 
+void AirsimROSWrapper::control_cmd_sub(const sensor_msgs::Joy::ConstPtr & msg, const std::string & vehicle_name) {
+    // ROS_WARN("Implement codes here");
+    // msg->
+    int vehicle_idx = vehicle_name_idx_map_[vehicle_name];
+    multirotor_ros_vec_[vehicle_idx].atti_cmd.roll = msg->axes[0];
+    multirotor_ros_vec_[vehicle_idx].atti_cmd.pitch = msg->axes[1];
+    multirotor_ros_vec_[vehicle_idx].atti_cmd.thrust = msg->axes[2];
+    multirotor_ros_vec_[vehicle_idx].atti_cmd.yaw = msg->axes[3];
+    multirotor_ros_vec_[vehicle_idx].atti_cmd.yaw_mode.is_rate = false;
+    multirotor_ros_vec_[vehicle_idx].has_atti_cmd = true;
+}
+
 void AirsimROSWrapper::vel_cmd_group_body_frame_cb(const airsim_ros_pkgs::VelCmdGroup& msg)
 {
     std::lock_guard<std::recursive_mutex> guard(drone_control_mutex_);
@@ -588,12 +607,12 @@ void AirsimROSWrapper::gimbal_angle_euler_cmd_cb(const airsim_ros_pkgs::GimbalAn
     }
 }
 
-nav_msgs::Odometry AirsimROSWrapper::get_odom_msg_from_airsim_state(const msr::airlib::MultirotorState& drone_state) const
+nav_msgs::Odometry AirsimROSWrapper::get_odom_msg_from_airsim_state(const msr::airlib::MultirotorState& drone_state)
 {
     nav_msgs::Odometry odom_ned_msg;
     // odom_ned_msg.header.frame_id = world_frame_id_;
     // odom_ned_msg.child_frame_id = "/airsim/odom_local_ned"; // todo make param
-
+    odom_ned_msg.header.stamp = make_ts(drone_state.timestamp);
     odom_ned_msg.pose.pose.position.x = drone_state.getPosition().x();
     odom_ned_msg.pose.pose.position.y = drone_state.getPosition().y();
     odom_ned_msg.pose.pose.position.z = drone_state.getPosition().z();
@@ -611,6 +630,21 @@ nav_msgs::Odometry AirsimROSWrapper::get_odom_msg_from_airsim_state(const msr::a
 
     return odom_ned_msg;
 }
+
+geometry_msgs::QuaternionStamped AirsimROSWrapper::get_attitude_from_airsim_state(const msr::airlib::MultirotorState& drone_state)
+{
+    geometry_msgs::QuaternionStamped attitude;
+    // odom_ned_msg.header.frame_id = world_frame_id_;
+    // odom_ned_msg.child_frame_id = "/airsim/odom_local_ned"; // todo make param
+    attitude.header.stamp = make_ts(drone_state.timestamp);
+    attitude.quaternion.x = drone_state.getOrientation().x();
+    attitude.quaternion.y = drone_state.getOrientation().y();
+    attitude.quaternion.z = drone_state.getOrientation().z();
+    attitude.quaternion.w = drone_state.getOrientation().w();
+
+    return attitude;
+}
+
 
 // https://docs.ros.org/jade/api/sensor_msgs/html/point__cloud__conversion_8h_source.html#l00066
 // look at UnrealLidarSensor.cpp UnrealLidarSensor::getPointCloud() for math
@@ -792,7 +826,11 @@ void AirsimROSWrapper::drone_state_timer_cb(const ros::TimerEvent& event)
             multirotor_ros.curr_odom_ned = get_odom_msg_from_airsim_state(multirotor_ros.curr_drone_state);
             multirotor_ros.curr_odom_ned.header.frame_id = multirotor_ros.vehicle_name;
             multirotor_ros.curr_odom_ned.child_frame_id = multirotor_ros.odom_frame_id;
-            multirotor_ros.curr_odom_ned.header.stamp = curr_ros_time;
+
+            multirotor_ros.curr_attitude = get_attitude_from_airsim_state(multirotor_ros.curr_drone_state);
+            // multirotor_ros.curr_attitude.child_frame_id = multirotor_ros.odom_frame_id;
+
+            // multirotor_ros.curr_odom_ned.header.stamp = curr_ros_time;
 
             multirotor_ros.gps_sensor_msg = get_gps_sensor_msg_from_airsim_geo_point(multirotor_ros.curr_drone_state.gps_location);
             multirotor_ros.gps_sensor_msg.header.stamp = curr_ros_time;
@@ -811,8 +849,18 @@ void AirsimROSWrapper::drone_state_timer_cb(const ros::TimerEvent& event)
                 lck.unlock();
             }
 
+            if (multirotor_ros.has_atti_cmd)
+            {
+                std::unique_lock<std::recursive_mutex> lck(drone_control_mutex_);
+                airsim_client_.moveByAngleThrottleAsync(multirotor_ros.atti_cmd.pitch, 
+                    multirotor_ros.atti_cmd.roll, multirotor_ros.atti_cmd.thrust, multirotor_ros.atti_cmd.yaw, vel_cmd_duration_, multirotor_ros.vehicle_name);
+                lck.unlock();
+            }
+
+
             // "clear" control cmds
             multirotor_ros.has_vel_cmd = false;
+            multirotor_ros.has_atti_cmd = false;
         }
 
         if (static_tf_msg_vec_.size() > 0)
@@ -932,7 +980,7 @@ void AirsimROSWrapper::append_static_lidar_tf(const std::string& vehicle_name, c
 {
 
     geometry_msgs::TransformStamped lidar_tf_msg;
-    lidar_tf_msg.header.frame_id = vehicle_name + "/odom_local_ned"; // todo multiple drones
+    lidar_tf_msg.header.frame_id = vehicle_name + "/odom_local_N"; // todo multiple drones
     lidar_tf_msg.child_frame_id = lidar_name;
     lidar_tf_msg.transform.translation.x = lidar_setting.position.x();
     lidar_tf_msg.transform.translation.y = lidar_setting.position.y();
@@ -1091,7 +1139,7 @@ sensor_msgs::ImagePtr AirsimROSWrapper::get_depth_img_msg_from_response(const Im
     // hence the dependency on opencv and cv_bridge. however, this is an extremely fast op, so no big deal.
     cv::Mat depth_img = manual_decode_depth(img_response);
     sensor_msgs::ImagePtr depth_img_msg = cv_bridge::CvImage(std_msgs::Header(), "32FC1", depth_img).toImageMsg();
-    depth_img_msg->header.stamp = curr_ros_time;
+    depth_img_msg->header.stamp = make_ts(img_response.time_stamp);
     depth_img_msg->header.frame_id = frame_id;
     return depth_img_msg;
 }

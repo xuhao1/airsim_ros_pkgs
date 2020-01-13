@@ -52,6 +52,9 @@ STRICT_MODE_ON
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
 #include <unordered_map>
+#include <sensor_msgs/Joy.h>
+#include <geometry_msgs/QuaternionStamped.h>
+
 // #include "nodelet/nodelet.h"
 
 // todo move airlib typedefs to separate header file?
@@ -79,6 +82,31 @@ struct VelCmd
     double x;
     double y;
     double z;
+    msr::airlib::DrivetrainType drivetrain;
+    msr::airlib::YawMode yaw_mode;
+    std::string vehicle_name;
+
+    // VelCmd() : 
+    //     x(0), y(0), z(0), 
+    //     vehicle_name("") {drivetrain = msr::airlib::DrivetrainType::MaxDegreeOfFreedom;
+    //             yaw_mode = msr::airlib::YawMode();};
+
+    // VelCmd(const double& x, const double& y, const double& z, 
+    //         msr::airlib::DrivetrainType drivetrain, 
+    //         const msr::airlib::YawMode& yaw_mode,
+    //         const std::string& vehicle_name) : 
+    //     x(x), y(y), z(z), 
+    //     drivetrain(drivetrain), 
+    //     yaw_mode(yaw_mode), 
+    //     vehicle_name(vehicle_name) {};
+};
+
+struct AttiCMD
+{
+    double roll;
+    double pitch;
+    double yaw;
+    double thrust;
     msr::airlib::DrivetrainType drivetrain;
     msr::airlib::YawMode yaw_mode;
     std::string vehicle_name;
@@ -141,6 +169,8 @@ private:
     void vel_cmd_world_frame_cb(const airsim_ros_pkgs::VelCmd::ConstPtr& msg, const std::string& vehicle_name);
     void vel_cmd_body_frame_cb(const airsim_ros_pkgs::VelCmd::ConstPtr& msg, const std::string& vehicle_name);
 
+    void control_cmd_sub(const sensor_msgs::Joy::ConstPtr & msg, const std::string & vehicle_name);
+
     void vel_cmd_group_body_frame_cb(const airsim_ros_pkgs::VelCmdGroup& msg);
     void vel_cmd_group_world_frame_cb(const airsim_ros_pkgs::VelCmdGroup& msg);
 
@@ -188,12 +218,12 @@ private:
     tf2::Quaternion get_tf2_quat(const msr::airlib::Quaternionr& airlib_quat) const;
     msr::airlib::Quaternionr get_airlib_quat(const geometry_msgs::Quaternion& geometry_msgs_quat) const;
     msr::airlib::Quaternionr get_airlib_quat(const tf2::Quaternion& tf2_quat) const;
-    nav_msgs::Odometry get_odom_msg_from_airsim_state(const msr::airlib::MultirotorState& drone_state) const;
+    nav_msgs::Odometry get_odom_msg_from_airsim_state(const msr::airlib::MultirotorState& drone_state);
     airsim_ros_pkgs::GPSYaw get_gps_msg_from_airsim_geo_point(const msr::airlib::GeoPoint& geo_point) const;
     sensor_msgs::NavSatFix get_gps_sensor_msg_from_airsim_geo_point(const msr::airlib::GeoPoint& geo_point) const;
     sensor_msgs::Imu get_imu_msg_from_airsim(const msr::airlib::ImuBase::Output& imu_data);
     sensor_msgs::PointCloud2 get_lidar_msg_from_airsim(const msr::airlib::LidarData& lidar_data) const;
-
+    geometry_msgs::QuaternionStamped get_attitude_from_airsim_state(const msr::airlib::MultirotorState& drone_state);
     // not used anymore, but can be useful in future with an unreal camera calibration environment
     void read_params_from_yaml_and_fill_cam_info_msg(const std::string& file_name, sensor_msgs::CameraInfo& cam_info) const;
     void convert_yaml_to_simple_mat(const YAML::Node& node, SimpleMatrix& m) const; // todo ugly
@@ -219,11 +249,12 @@ private:
         /// All things ROS
         ros::Publisher odom_local_ned_pub;
         ros::Publisher global_gps_pub;
+        ros::Publisher attitude_pub;
         // ros::Publisher home_geo_point_pub_; // geo coord of unreal origin
 
         ros::Subscriber vel_cmd_body_frame_sub;
         ros::Subscriber vel_cmd_world_frame_sub;
-
+        ros::Subscriber control_sub;
         ros::ServiceServer takeoff_srvr;
         ros::ServiceServer land_srvr;
 
@@ -231,9 +262,12 @@ private:
         msr::airlib::MultirotorState curr_drone_state;
         // bool in_air_; // todo change to "status" and keep track of this
         nav_msgs::Odometry curr_odom_ned;
+        geometry_msgs::QuaternionStamped curr_attitude;
         sensor_msgs::NavSatFix gps_sensor_msg;
-        bool has_vel_cmd;
+        bool has_vel_cmd = false;
+        bool has_atti_cmd = false;
         VelCmd vel_cmd;
+        AttiCMD atti_cmd;
 
         std::string odom_frame_id;
         /// Status
