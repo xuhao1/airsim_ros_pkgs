@@ -609,6 +609,7 @@ void AirsimROSWrapper::gimbal_angle_euler_cmd_cb(const airsim_ros_pkgs::GimbalAn
 
 nav_msgs::Odometry AirsimROSWrapper::get_odom_msg_from_airsim_state(const msr::airlib::MultirotorState& drone_state)
 {
+/*
     nav_msgs::Odometry odom_ned_msg;
     // odom_ned_msg.header.frame_id = world_frame_id_;
     // odom_ned_msg.child_frame_id = "/airsim/odom_local_ned"; // todo make param
@@ -627,8 +628,27 @@ nav_msgs::Odometry AirsimROSWrapper::get_odom_msg_from_airsim_state(const msr::a
     odom_ned_msg.twist.twist.angular.x = drone_state.kinematics_estimated.twist.angular.x();
     odom_ned_msg.twist.twist.angular.y = drone_state.kinematics_estimated.twist.angular.y();
     odom_ned_msg.twist.twist.angular.z = drone_state.kinematics_estimated.twist.angular.z();
+*/
+//FLU 
+    nav_msgs::Odometry odom_flu_msg;
+    odom_flu_msg.header.stamp = make_ts(drone_state.timestamp);
+    odom_flu_msg.pose.pose.position.x = drone_state.getPosition().x();
+    odom_flu_msg.pose.pose.position.y = -drone_state.getPosition().y();
+    odom_flu_msg.pose.pose.position.z = -drone_state.getPosition().z();
 
-    return odom_ned_msg;
+    //Modified Quaternion Here
+    odom_flu_msg.pose.pose.orientation.x = drone_state.getOrientation().x();
+    odom_flu_msg.pose.pose.orientation.y = drone_state.getOrientation().y();
+    odom_flu_msg.pose.pose.orientation.z = drone_state.getOrientation().z();
+    odom_flu_msg.pose.pose.orientation.w = drone_state.getOrientation().w();
+
+    odom_flu_msg.twist.twist.linear.x = drone_state.kinematics_estimated.twist.linear.x();
+    odom_flu_msg.twist.twist.linear.y = -drone_state.kinematics_estimated.twist.linear.y();
+    odom_flu_msg.twist.twist.linear.z = -drone_state.kinematics_estimated.twist.linear.z();
+    odom_flu_msg.twist.twist.angular.x = drone_state.kinematics_estimated.twist.angular.x();
+    odom_flu_msg.twist.twist.angular.y = -drone_state.kinematics_estimated.twist.angular.y();
+    odom_flu_msg.twist.twist.angular.z = -drone_state.kinematics_estimated.twist.angular.z();
+    return odom_flu_msg;
 }
 
 geometry_msgs::QuaternionStamped AirsimROSWrapper::get_attitude_from_airsim_state(const msr::airlib::MultirotorState& drone_state)
@@ -786,9 +806,9 @@ void AirsimROSWrapper::drone_imu_timer_cb(const ros::TimerEvent& event)
             int ctr = 0;
             for (const auto& vehicle_imu_pair: vehicle_imu_map_)
             {
-                // std::unique_lock<std::recursive_mutex> lck(drone_control_mutex_);
+                std::unique_lock<std::recursive_mutex> lck(drone_control_mutex_);
                 auto imu_data = airsim_client_.getImuData(vehicle_imu_pair.second, vehicle_imu_pair.first);
-                // lck.unlock();
+                lck.unlock();
                 sensor_msgs::Imu imu_msg = get_imu_msg_from_airsim(imu_data);
                 imu_msg.header.frame_id = vehicle_imu_pair.first;
                 imu_pub_vec_[ctr].publish(imu_msg);
@@ -837,6 +857,7 @@ void AirsimROSWrapper::drone_state_timer_cb(const ros::TimerEvent& event)
 
             // publish to ROS!  
             multirotor_ros.odom_local_ned_pub.publish(multirotor_ros.curr_odom_ned);
+            multirotor_ros.attitude_pub.publish(multirotor_ros.curr_attitude);
             publish_odom_tf(multirotor_ros.curr_odom_ned);
             multirotor_ros.global_gps_pub.publish(multirotor_ros.gps_sensor_msg);
 
