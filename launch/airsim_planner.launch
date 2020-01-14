@@ -1,0 +1,36 @@
+<launch>
+	<arg name="host" default="localhost" />
+    <arg name="vo_topic" default="/airsim_node/Drone_1/odom_local_ned"/>
+	<node name="airsim_node" pkg="airsim_ros_pkgs" type="airsim_node" output="screen">
+	<!-- <node pkg="nodelet" type="nodelet" name="airsim_nodelet_manager" args="manager" output="screen" /> -->
+	<!-- <node pkg="nodelet" type="nodelet" name="airsim_nodelet" args="standalone airsim_ros_pkgs/airsim_ros_nodelet airsim_nodelet_manager" output="screen"> -->
+
+		<!-- ROS timer rates. Note that timer callback will be processed at maximum possible rate, upperbounded by the following ROS params -->
+		<param name="is_vulkan" type="bool" value="false" /> 
+		<param name="update_airsim_img_response_every_n_sec" type="double" value="0.05" /> 
+		<param name="update_airsim_control_every_n_sec" type="double" value="0.02" />
+		<param name="update_lidar_every_n_sec" type="double" value="0.01" />
+		<param name="update_imu_n_sec" type="double" value="0.01" />
+		<param name="host_ip" type="string" value="$(arg host)" />
+	</node>
+    <node name="drone_commander" pkg="drone_commander" type="drone_commander_node" output="screen">
+        <remap from="/drone_commander/visual_odometry" to="$(arg vo_topic)"/>
+        <remap from="/drone_commander/flight_status" to="/airsim_node/Drone_1/flight_status"/>
+        <remap from="/drone_commander/drone_arm_control" to="/airsim_node/Drone_1/arm"/>
+        <remap from="/drone_commander/rc" to="/airsim_node/Drone_1/rc"/>
+        <remap from="/drone_commander/control_device" to="/airsim_node/Drone_1/control_device"/>
+        <remap from="/drone_commander/sdk_control_authority" to="/airsim_node/Drone_1/control_auth"/>
+        <remap from="/drone_commander/fc_attitude" to="/airsim_node/Drone_1/attitude" />
+        <remap from="/drone_commander/battery" to="/airsim_node/battery" />
+        <param name="rc_fail_detection" type="bool" value="false" />
+    </node>
+    <node pkg="drone_position_control" name="drone_position_control" type="drone_position_control_node" output="log">
+        <rosparam command="load" file="$(find drone_position_control)/launch/pos_control_param.yaml" />
+        <remap from="/drone_position_control/odometry" to="$(arg vo_topic)"/>
+        <remap from="/drone_position_control/fc_attitude" to="/airsim_node/Drone_1/attitude" />
+        <remap from="/drone_position_control/dji_sdk_control" to="/airsim_node/Drone_1/flight_control"/>
+        <remap from="/drone_position_control/fc_imu" to="/airsim_node/Drone_1/imu/imu_1"/>
+    </node>
+	<!-- Static transforms -->
+	<include file="$(find airsim_ros_pkgs)/launch/static_transforms.launch"/>
+</launch>

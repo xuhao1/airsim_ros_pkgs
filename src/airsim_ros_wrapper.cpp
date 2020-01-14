@@ -906,15 +906,15 @@ void AirsimROSWrapper::drone_state_timer_cb(const ros::TimerEvent& event)
             if (rc.axes.size() < 6) {
                 rc.axes.push_back(_rc_data.roll*10000);
                 rc.axes.push_back(_rc_data.pitch*10000);
-                rc.axes.push_back((_rc_data.throttle - 0.5)*20000);
                 rc.axes.push_back(_rc_data.yaw*10000);
+                rc.axes.push_back((_rc_data.throttle - 0.5)*20000);
                 rc.axes.push_back(10000);
                 rc.axes.push_back(-10000); 
             } else {
                 rc.axes[0] = _rc_data.roll*10000;
                 rc.axes[1] = _rc_data.pitch*10000;
-                rc.axes[2] = (_rc_data.throttle - 0.5)*20000;
-                rc.axes[3] = _rc_data.yaw*10000;
+                rc.axes[3] = (_rc_data.throttle - 0.5)*20000;
+                rc.axes[2] = _rc_data.yaw*10000;
             }
 
             multirotor_ros.rcdata_pub.publish(rc);
