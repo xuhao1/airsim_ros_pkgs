@@ -46,7 +46,7 @@ AirsimROSWrapper::AirsimROSWrapper(const ros::NodeHandle& nh, const ros::NodeHan
     is_used_lidar_timer_cb_queue_ = false;
     is_used_img_timer_cb_queue_ = false;
 
-    world_frame_id_ = "world_ned"; // todo rosparam?
+    world_frame_id_ = "world"; // todo rosparam?
 
     initialize_ros();
 
@@ -146,7 +146,6 @@ void AirsimROSWrapper::create_ros_pubs_from_settings_json()
         multirotor_ros.odom_local_ned_pub = nh_private_.advertise<nav_msgs::Odometry>(curr_vehicle_name + "/odom_local_ned", 10);
         multirotor_ros.global_gps_pub = nh_private_.advertise<sensor_msgs::NavSatFix>(curr_vehicle_name + "/global_gps", 10);
         multirotor_ros.attitude_pub = nh_private_.advertise<geometry_msgs::QuaternionStamped>(curr_vehicle_name + "/attitude", 10);
-
         // bind to a single callback. todo optimal subs queue length
         // bind multiple topics to a single callback, but keep track of which vehicle name it was by passing curr_vehicle_name as the 2nd argument 
         multirotor_ros.vel_cmd_body_frame_sub = nh_private_.subscribe<airsim_ros_pkgs::VelCmd>(curr_vehicle_name + "/vel_cmd_body_frame", 1, 
@@ -202,9 +201,26 @@ void AirsimROSWrapper::create_ros_pubs_from_settings_json()
                         current_image_request_vec.push_back(ImageRequest(curr_camera_name, curr_image_type, true));
                     }
 
+                    image_pose_pub_vec_.push_back(nh_private_.advertise<geometry_msgs::PoseStamped>(
+                            curr_vehicle_name + "/" + curr_camera_name + "/" + image_type_int_to_string_map_.at(capture_setting.image_type) + "/camera_pose", 10));
                     image_pub_vec_.push_back(image_transporter.advertise(curr_vehicle_name + "/" + curr_camera_name + "/" + image_type_int_to_string_map_.at(capture_setting.image_type), 1));
                     cam_info_pub_vec_.push_back(nh_private_.advertise<sensor_msgs::CameraInfo> (curr_vehicle_name + "/" + curr_camera_name + "/" + image_type_int_to_string_map_.at(capture_setting.image_type) + "/camera_info", 10));
+                    multirotor_ros_index_vec_.push_back(multirotor_ros_vec_.size() - 1);
                     camera_info_msg_vec_.push_back(generate_cam_info(curr_camera_name, camera_setting, capture_setting));
+                    Eigen::Vector3d cam_pos(camera_setting.position.x(), camera_setting.position.y(), camera_setting.position.z());
+                    tf2::Quaternion _quat;
+                    _quat.setRPY(camera_setting.rotation.roll, camera_setting.rotation.pitch, camera_setting.rotation.yaw);
+                    Eigen::Quaterniond quat(_quat.w(), _quat.x(), _quat.y(), _quat.z());
+                    Eigen::Matrix3d CAM_BASE;
+                    CAM_BASE << 0, 0, 1, 
+                                -1, 0, 0,
+                                0, -1, 0;
+                    quat = quat*Eigen::Quaterniond(CAM_BASE);
+                    quat.y() = -quat.y();
+                    quat.z() = -quat.z();
+                    camera_extrinsic.push_back(
+                        std::pair<Eigen::Quaterniond, Eigen::Vector3d>(quat, cam_pos)
+                    );
                 }
             }
 
@@ -632,15 +648,19 @@ nav_msgs::Odometry AirsimROSWrapper::get_odom_msg_from_airsim_state(const msr::a
 //FLU 
     nav_msgs::Odometry odom_flu_msg;
     odom_flu_msg.header.stamp = make_ts(drone_state.timestamp);
+    odom_flu_msg.header.frame_id = world_frame_id_;
     odom_flu_msg.pose.pose.position.x = drone_state.getPosition().x();
     odom_flu_msg.pose.pose.position.y = -drone_state.getPosition().y();
     odom_flu_msg.pose.pose.position.z = -drone_state.getPosition().z();
 
     //Modified Quaternion Here
-    odom_flu_msg.pose.pose.orientation.x = drone_state.getOrientation().x();
-    odom_flu_msg.pose.pose.orientation.y = drone_state.getOrientation().y();
-    odom_flu_msg.pose.pose.orientation.z = drone_state.getOrientation().z();
-    odom_flu_msg.pose.pose.orientation.w = drone_state.getOrientation().w();
+    Eigen::Quaterniond quat(drone_state.getOrientation().w(), drone_state.getOrientation().x(), drone_state.getOrientation().y(), drone_state.getOrientation().z());
+    // quat = Eigen::Quaterniond(sqrt(2.0)/2.0, sqrt(2.0)/2.0) * quat;
+    // quat.
+    odom_flu_msg.pose.pose.orientation.x = quat.x();
+    odom_flu_msg.pose.pose.orientation.y = - quat.y();
+    odom_flu_msg.pose.pose.orientation.z = - quat.z();
+    odom_flu_msg.pose.pose.orientation.w = quat.w();
 
     odom_flu_msg.twist.twist.linear.x = drone_state.kinematics_estimated.twist.linear.x();
     odom_flu_msg.twist.twist.linear.y = -drone_state.kinematics_estimated.twist.linear.y();
@@ -844,7 +864,7 @@ void AirsimROSWrapper::drone_state_timer_cb(const ros::TimerEvent& event)
 
             // convert airsim drone state to ROS msgs
             multirotor_ros.curr_odom_ned = get_odom_msg_from_airsim_state(multirotor_ros.curr_drone_state);
-            multirotor_ros.curr_odom_ned.header.frame_id = multirotor_ros.vehicle_name;
+            // multirotor_ros.curr_odom_ned.header.frame_id = multirotor_ros.vehicle_name;
             multirotor_ros.curr_odom_ned.child_frame_id = multirotor_ros.odom_frame_id;
 
             multirotor_ros.curr_attitude = get_attitude_from_airsim_state(multirotor_ros.curr_drone_state);
@@ -1208,9 +1228,32 @@ void AirsimROSWrapper::process_and_publish_img_response(const std::vector<ImageR
         // DepthPlanner / DepthPerspective / DepthVis / DisparityNormalized
         if (curr_img_response.pixels_as_float)
         {
+            
             image_pub_vec_[img_response_idx_internal].publish(get_depth_img_msg_from_response(curr_img_response, 
                                                     curr_ros_time, 
                                                     curr_img_response.camera_name + "_optical"));
+            //Calc camera pose
+            geometry_msgs::PoseStamped pose;
+            pose.header.stamp = make_ts(curr_img_response.time_stamp);
+            pose.header.frame_id = "world";
+            auto drone_state = multirotor_ros_vec_[multirotor_ros_index_vec_[img_response_idx_internal]].curr_drone_state;
+            Eigen::Vector3d position(drone_state.getPosition().x(), drone_state.getPosition().y(), drone_state.getPosition().z());
+            Eigen::Quaterniond attitude(drone_state.getOrientation().w(), drone_state.getOrientation().x(), 
+                drone_state.getOrientation().y(), drone_state.getOrientation().z());
+            auto cam_att = camera_extrinsic[img_response_idx_internal].first;    
+            auto cam_pos = camera_extrinsic[img_response_idx_internal].second;
+            position = position + attitude*cam_pos;
+            attitude = attitude*cam_att;
+            pose.pose.position.x = position.x();
+            pose.pose.position.y = -position.y();    
+            pose.pose.position.z = -position.z();    
+
+            pose.pose.orientation.w = attitude.w();    
+            pose.pose.orientation.x = attitude.x();    
+            pose.pose.orientation.y = -attitude.y();    
+            pose.pose.orientation.z = -attitude.z();    
+            image_pose_pub_vec_[img_response_idx_internal].publish(pose);
+                                                    
         }
         // Scene / Segmentation / SurfaceNormals / Infrared
         else

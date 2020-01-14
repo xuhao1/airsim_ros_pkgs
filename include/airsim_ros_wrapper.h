@@ -250,6 +250,7 @@ private:
         ros::Publisher odom_local_ned_pub;
         ros::Publisher global_gps_pub;
         ros::Publisher attitude_pub;
+        ros::Publisher depth_camera_pub;
         // ros::Publisher home_geo_point_pub_; // geo coord of unreal origin
 
         ros::Subscriber vel_cmd_body_frame_sub;
@@ -332,6 +333,9 @@ private:
     typedef std::pair<std::vector<ImageRequest>, std::string> airsim_img_request_vehicle_name_pair;
     std::vector<airsim_img_request_vehicle_name_pair> airsim_img_request_vehicle_name_pair_vec_;
     std::vector<image_transport::Publisher> image_pub_vec_; 
+    std::vector<ros::Publisher> image_pose_pub_vec_; 
+    std::vector<std::pair<Eigen::Quaterniond, Eigen::Vector3d> > camera_extrinsic;
+    std::vector<int > multirotor_ros_index_vec_;
     std::vector<ros::Publisher> cam_info_pub_vec_;
     std::vector<ros::Publisher> lidar_pub_vec_;
     std::vector<ros::Publisher> imu_pub_vec_;
