@@ -57,6 +57,14 @@ STRICT_MODE_ON
 
 // #include "nodelet/nodelet.h"
 
+//Adapt for DJI SDK
+#include <dji_sdk/ControlDevice.h>
+#include <dji_sdk/SDKControlAuthority.h>
+#include <dji_sdk/DroneArmControl.h>
+
+
+using namespace dji_sdk;
+
 // todo move airlib typedefs to separate header file?
 typedef msr::airlib::ImageCaptureBase::ImageRequest ImageRequest;
 typedef msr::airlib::ImageCaptureBase::ImageResponse ImageResponse;
@@ -186,6 +194,10 @@ private:
     // void set_zero_vel_cmd();
 
     /// ROS service callbacks
+    
+    bool drone_arm_srv_cb(DroneArmControl::Request& request, DroneArmControl::Response& response, const std::string& vehicle_name);
+    bool control_auth_srv_cb(SDKControlAuthority::Request& request, SDKControlAuthority::Response& response, const std::string& vehicle_name);
+
     bool takeoff_srv_cb(airsim_ros_pkgs::Takeoff::Request& request, airsim_ros_pkgs::Takeoff::Response& response, const std::string& vehicle_name);
     bool takeoff_group_srv_cb(airsim_ros_pkgs::TakeoffGroup::Request& request, airsim_ros_pkgs::TakeoffGroup::Response& response);
     bool takeoff_all_srv_cb(airsim_ros_pkgs::Takeoff::Request& request, airsim_ros_pkgs::Takeoff::Response& response);
@@ -213,7 +225,6 @@ private:
     void set_nans_to_zeros_in_pose(VehicleSetting& vehicle_setting) const;
     void set_nans_to_zeros_in_pose(const VehicleSetting& vehicle_setting, CameraSetting& camera_setting) const;
     void set_nans_to_zeros_in_pose(const VehicleSetting& vehicle_setting, LidarSetting& lidar_setting) const;
-
     /// utils. todo parse into an Airlib<->ROS conversion class
     tf2::Quaternion get_tf2_quat(const msr::airlib::Quaternionr& airlib_quat) const;
     msr::airlib::Quaternionr get_airlib_quat(const geometry_msgs::Quaternion& geometry_msgs_quat) const;
@@ -228,6 +239,7 @@ private:
     void read_params_from_yaml_and_fill_cam_info_msg(const std::string& file_name, sensor_msgs::CameraInfo& cam_info) const;
     void convert_yaml_to_simple_mat(const YAML::Node& node, SimpleMatrix& m) const; // todo ugly
 
+    // void control
 private:
     // subscriber / services for ALL robots
     ros::Subscriber vel_cmd_all_body_frame_sub_;
@@ -241,6 +253,10 @@ private:
     ros::ServiceServer takeoff_group_srvr_;
     ros::ServiceServer land_group_srvr_;
 
+
+
+
+
     // utility struct for a SINGLE robot
     struct MultiRotorROS
     {
@@ -251,6 +267,11 @@ private:
         ros::Publisher global_gps_pub;
         ros::Publisher attitude_pub;
         ros::Publisher depth_camera_pub;
+        
+        ros::Publisher control_device_pub;
+        ros::Publisher flight_status_pub;
+        ros::Publisher rcdata_pub;
+
         // ros::Publisher home_geo_point_pub_; // geo coord of unreal origin
 
         ros::Subscriber vel_cmd_body_frame_sub;
@@ -258,8 +279,10 @@ private:
         ros::Subscriber control_sub;
         ros::ServiceServer takeoff_srvr;
         ros::ServiceServer land_srvr;
-
-        /// State
+        ros::ServiceServer sdk_control_auth_server;
+        ros::ServiceServer drone_arm_control_server;
+        sensor_msgs::Joy rc;
+ 
         msr::airlib::MultirotorState curr_drone_state;
         // bool in_air_; // todo change to "status" and keep track of this
         nav_msgs::Odometry curr_odom_ned;

@@ -4,6 +4,7 @@
 // PLUGINLIB_EXPORT_CLASS(AirsimROSWrapper, nodelet::Nodelet)
 #include "common/AirSimSettings.hpp"
 #include <chrono> 
+#include <std_msgs/UInt8.h>
 
 constexpr char AirsimROSWrapper::CAM_YML_NAME[];
 constexpr char AirsimROSWrapper::WIDTH_YML_NAME[];
@@ -67,8 +68,8 @@ void AirsimROSWrapper::initialize_airsim()
 
         for (const auto& vehicle_name : vehicle_names_)
         {
-            airsim_client_.enableApiControl(true, vehicle_name); // todo expose as rosservice?
-            airsim_client_.armDisarm(true, vehicle_name); // todo exposes as rosservice?
+            // airsim_client_.enableApiControl(true, vehicle_name); // todo expose as rosservice?
+            // airsim_client_.armDisarm(true, vehicle_name); // todo exposes as rosservice?
         }
 
         origin_geo_point_ = airsim_client_.getHomeGeoPoint("");
@@ -102,6 +103,18 @@ void AirsimROSWrapper::initialize_ros()
     airsim_imu_update_timer_ = nh_private_.createTimer(ros::Duration(imu_n_sec), &AirsimROSWrapper::drone_imu_timer_cb, this);
 }
 
+
+
+bool AirsimROSWrapper::drone_arm_srv_cb(DroneArmControl::Request& request, DroneArmControl::Response& response, const std::string& vehicle_name) {
+    response.result = airsim_client_.armDisarm(request.arm, vehicle_name);
+    return true; 
+}
+
+bool AirsimROSWrapper::control_auth_srv_cb(SDKControlAuthority::Request& request, SDKControlAuthority::Response& response, const std::string& vehicle_name) {
+    airsim_client_.enableApiControl(request.control_enable, vehicle_name);
+    response.result = airsim_client_.isApiControlEnabled(vehicle_name);
+    return true;
+}
 
 
 // XmlRpc::XmlRpcValue can't be const in this case
@@ -148,6 +161,10 @@ void AirsimROSWrapper::create_ros_pubs_from_settings_json()
         multirotor_ros.attitude_pub = nh_private_.advertise<geometry_msgs::QuaternionStamped>(curr_vehicle_name + "/attitude", 10);
         // bind to a single callback. todo optimal subs queue length
         // bind multiple topics to a single callback, but keep track of which vehicle name it was by passing curr_vehicle_name as the 2nd argument 
+        multirotor_ros.control_device_pub = nh_private_.advertise<dji_sdk::ControlDevice>(curr_vehicle_name + "/control_device", 10);
+        multirotor_ros.flight_status_pub = nh_private_.advertise<std_msgs::UInt8>(curr_vehicle_name + "/flight_status", 10);
+        multirotor_ros.rcdata_pub = nh_private_.advertise<sensor_msgs::Joy>(curr_vehicle_name + "/rc", 10);
+
         multirotor_ros.vel_cmd_body_frame_sub = nh_private_.subscribe<airsim_ros_pkgs::VelCmd>(curr_vehicle_name + "/vel_cmd_body_frame", 1, 
             boost::bind(&AirsimROSWrapper::vel_cmd_body_frame_cb, this, _1, multirotor_ros.vehicle_name)); // todo ros::TransportHints().tcpNoDelay();
         multirotor_ros.vel_cmd_world_frame_sub = nh_private_.subscribe<airsim_ros_pkgs::VelCmd>(curr_vehicle_name + "/vel_cmd_world_frame", 1, 
@@ -161,6 +178,9 @@ void AirsimROSWrapper::create_ros_pubs_from_settings_json()
         multirotor_ros.land_srvr = nh_private_.advertiseService<airsim_ros_pkgs::Land::Request, airsim_ros_pkgs::Land::Response>(curr_vehicle_name + "/land", 
             boost::bind(&AirsimROSWrapper::land_srv_cb, this, _1, _2, multirotor_ros.vehicle_name) );
         // multirotor_ros.reset_srvr = nh_private_.advertiseService(curr_vehicle_name + "/reset",&AirsimROSWrapper::reset_srv_cb, this);
+        multirotor_ros.sdk_control_auth_server = nh_private_.advertiseService<dji_sdk::SDKControlAuthority::Request, dji_sdk::SDKControlAuthority::Response>(curr_vehicle_name + "/control_auth", boost::bind(&AirsimROSWrapper::control_auth_srv_cb, this, _1, _2, multirotor_ros.vehicle_name));
+        multirotor_ros.drone_arm_control_server = nh_private_.advertiseService<dji_sdk::DroneArmControl::Request, dji_sdk::DroneArmControl::Response>(curr_vehicle_name + "/arm", 
+            boost::bind(&AirsimROSWrapper::drone_arm_srv_cb, this, _1, _2, multirotor_ros.vehicle_name));
         
 
         multirotor_ros_vec_.push_back(multirotor_ros);
@@ -288,7 +308,6 @@ void AirsimROSWrapper::create_ros_pubs_from_settings_json()
     {
         takeoff_all_srvr_ = nh_private_.advertiseService("all_robots/takeoff", &AirsimROSWrapper::takeoff_all_srv_cb, this);
         land_all_srvr_ = nh_private_.advertiseService("all_robots/land", &AirsimROSWrapper::land_all_srv_cb, this);
-
         vel_cmd_all_body_frame_sub_ = nh_private_.subscribe("all_robots/vel_cmd_body_frame", 1, &AirsimROSWrapper::vel_cmd_all_body_frame_cb, this);
         vel_cmd_all_world_frame_sub_ = nh_private_.subscribe("all_robots/vel_cmd_world_frame", 1, &AirsimROSWrapper::vel_cmd_all_world_frame_cb, this);
 
@@ -881,7 +900,46 @@ void AirsimROSWrapper::drone_state_timer_cb(const ros::TimerEvent& event)
             publish_odom_tf(multirotor_ros.curr_odom_ned);
             multirotor_ros.global_gps_pub.publish(multirotor_ros.gps_sensor_msg);
 
-            // send control commands from the last callback to airsim
+           
+            auto _rc_data = multirotor_ros.curr_drone_state.rc_data;
+            auto & rc = multirotor_ros.rc;
+            if (rc.axes.size() < 6) {
+                rc.axes.push_back(_rc_data.roll*10000);
+                rc.axes.push_back(_rc_data.pitch*10000);
+                rc.axes.push_back((_rc_data.throttle - 0.5)*20000);
+                rc.axes.push_back(_rc_data.yaw*10000);
+                rc.axes.push_back(10000);
+                rc.axes.push_back(-10000); 
+            } else {
+                rc.axes[0] = _rc_data.roll*10000;
+                rc.axes[1] = _rc_data.pitch*10000;
+                rc.axes[2] = (_rc_data.throttle - 0.5)*20000;
+                rc.axes[3] = _rc_data.yaw*10000;
+            }
+
+            multirotor_ros.rcdata_pub.publish(rc);
+
+            static int _flight_status_count = 0;
+            if (_flight_status_count ++ % 10 == 0) {
+                /*FLight status*/
+                std_msgs::UInt8 _flight_status;
+                if (multirotor_ros.curr_drone_state.landed_state > msr::airlib::LandedState::Landed) {
+                    _flight_status.data = 2;
+                } else {
+                    _flight_status.data = 0;
+                }
+                multirotor_ros.flight_status_pub.publish(_flight_status);
+                
+                dji_sdk::ControlDevice control_dev;
+                if(airsim_client_.isApiControlEnabled(multirotor_ros.vehicle_name)) {
+                    control_dev.controlDevice = 2;
+                } else {
+                    control_dev.controlDevice = 0;
+                }
+
+                multirotor_ros.control_device_pub.publish(control_dev);
+            }
+
             if (multirotor_ros.has_vel_cmd)
             {
                 std::unique_lock<std::recursive_mutex> lck(drone_control_mutex_);
