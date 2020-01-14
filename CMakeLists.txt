@@ -16,7 +16,6 @@ message(STATUS "found RPC_LIB_INCLUDES=${RPC_LIB_INCLUDES}")
 # todo eigen3 in AirLib already
 # find_package(Eigen3 REQUIRED)
 find_package(Boost REQUIRED)
-SET("CUDA_TOOLKIT_ROOT_DIR" "/usr/local/cuda-10.1")
 SET("OpenCV_DIR"  "/usr/local/share/OpenCV/")
 find_package(OpenCV REQUIRED)
 
