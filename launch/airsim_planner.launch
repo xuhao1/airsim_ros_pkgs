@@ -32,5 +32,5 @@
         <remap from="/drone_position_control/fc_imu" to="/airsim_node/Drone_$(arg drone_id)/imu/imu_1"/>
     </node>
 	<!-- Static transforms -->
-	<include file="$(find airsim_ros_pkgs)/launch/static_transforms.launch"/>
+	<!-- <include file="$(find airsim_ros_pkgs)/launch/static_transforms.launch"/> -->
 </launch>
