@@ -1142,7 +1142,7 @@ void AirsimROSWrapper::img_response_timer_cb(const ros::TimerEvent& event)
             // std::unique_lock<std::recursive_mutex> lck(drone_control_mutex_);
             const std::vector<ImageResponse>& img_response = airsim_client_images_.simGetImages(airsim_img_request_vehicle_name_pair.first, airsim_img_request_vehicle_name_pair.second);
             // lck.unlock();
-            ROS_INFO("Grab image cost %fms Length %ld name %s", DT_MS(start), img_response.size(), airsim_img_request_vehicle_name_pair.second.c_str());
+            ROS_INFO_THROTTLE(1.0, "Grab image cost %fms Length %ld name %s", DT_MS(start), img_response.size(), airsim_img_request_vehicle_name_pair.second.c_str());
 
             if (img_response.size() == airsim_img_request_vehicle_name_pair.first.size()) 
             {
